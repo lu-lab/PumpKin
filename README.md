@@ -53,6 +53,9 @@ These are used in PumpKin to sample a uniform number of points in the grinder fo
 3. This script is designed to locate all videos and process them, but if you only wish to process a selection of them, edit `videos` to be a list of the specific videos you would like processed.
 4. PumpKin saves the detected pump times and continuous pumping rate estimate to `./outputs/pumpkin` in CSV format by default.
 
+## Documentation
+Documentation for PumpKin is available at [https://erinshappell.github.io/pumpkin-docs/](https://erinshappell.github.io/pumpkin-docs/)
+
 ## References
 EZ-FRCNN is an implementation of Faster R-CNN, an algorithm developed by [Ren et al](https://ieeexplore.ieee.org/document/7485869). 
 
