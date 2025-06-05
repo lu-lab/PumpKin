@@ -1,0 +1,1 @@
+Store all bounding box coordinates from FRCNN grinder tracking here!

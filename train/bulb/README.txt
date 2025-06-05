@@ -1,0 +1,1 @@
+Store images to be used for FRCNN model training here!

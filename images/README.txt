@@ -1,0 +1,1 @@
+Store all images you wish to process here!

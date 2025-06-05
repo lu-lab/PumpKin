@@ -1,0 +1,1 @@
+Store the cropped versions (ROI) for all videos here!

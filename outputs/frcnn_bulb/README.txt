@@ -1,0 +1,1 @@
+Store all bounding box coordinates from FRCNN bulb tracking here!
