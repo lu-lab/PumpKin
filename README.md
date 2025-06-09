@@ -9,6 +9,16 @@ PumpKin is designed to automatically track the pharyngeal pumping rate in indivi
 - **Fast FRCNN inferencing**: around 15 FPS on a single GPU
 - Detailed documentation and tutorials for use
 
+## Contents
+1. [Features](#features)
+2. [Contents](#contents)
+3. [Requirements](#requirements)
+    - [Installation (Windows)](#installation-windows)
+4. [Getting Started](#getting-started)
+5. [Documentation](#documentation)
+6. [Data Availability](#data-availability)
+7. [References](#references)
+
 ## Requirements
 We provide instructions for installing PumpKin (with EZ-FRCNN) on Windows below. While a GPU is **highly recommended** to use PumpKin and EZ-FRCNN, it is not required.
 
