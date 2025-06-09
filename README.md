@@ -1,6 +1,6 @@
 # PumpKin: A machine learning package for automatically tracking pharyngeal pumping kinematics in freely moving *C. elegans*
 
-PumpKin is designed to automatically track the pharyngeal pumping rate in individual freely moving *C. elegans*, but may be adapted to track the motion of structures in other organisms as well! This package is built using EZ-FRCNN: a user-friendly implementation of the popular Faster Region-based Convolutional Neural Network (Faster R-CNN) originally developed by [Ren et al](https://ieeexplore.ieee.org/document/7485869). To get started, continue reading below.
+PumpKin is designed to automatically track the pharyngeal pumping rate in individual freely moving *C. elegans*, but may be adapted to track the motion of structures in other organisms as well! This package is built using [EZ-FRCNN](https://github.com/lu-lab/ez-frcnn): a user-friendly implementation of the popular Faster Region-based Convolutional Neural Network (Faster R-CNN) originally developed by [Ren et al](https://ieeexplore.ieee.org/document/7485869). To get started, continue reading below.
 
 ## Features
 - Jupyter Notebook-based for ease-of-use
