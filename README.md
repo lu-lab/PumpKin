@@ -3,7 +3,6 @@
 PumpKin is designed to automatically track the pharyngeal pumping rate in individual freely moving *C. elegans*, but may be adapted to track the motion of structures in other organisms as well! This package is built using EZ-FRCNN: a user-friendly implementation of the popular Faster Region-based Convolutional Neural Network (Faster R-CNN) originally developed by [Ren et al](https://ieeexplore.ieee.org/document/7485869). To get started, visit [www.ezfrcnn.com](www.ezfrcnn.com) or continue reading below.
 
 ## Features
-- Easy installation and environment setup for all OSes
 - Jupyter Notebook-based for ease-of-use
 - Simple in-house annotation tools
 - **Fast FRCNN training**: around 1 hour on a single GPU for a standard dataset
