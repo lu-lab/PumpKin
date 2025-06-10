@@ -73,4 +73,7 @@ EZ-FRCNN is an implementation of Faster R-CNN, an algorithm developed by [Ren et
 
 Motion compensation and optical flow code is adapted from code written by [Isaac Berrios](https://github.com/itberrios/CV_projects/tree/main).
 
-Written by Erin Shappell and Jacob Wheelock for Lu Lab, 2025.
+EZ-FRCNN was written by Jacob Wheelock and Erin Shappell for Lu Lab, 2025.
+
+PumpKin was written by Erin Shappell for Lu Lab, 2025.
+
