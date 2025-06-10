@@ -1,4 +1,12 @@
-### Required libraries
+################################################################################
+# pumpkin.py
+# Written by Erin Shappell for Lu Lab
+# 
+# This module contains all functions used to generate a continuous pumping rate
+# estimate from an FRCNN-tracked grinder in freely moving C. elegans.
+#
+################################################################################
+# Imports
 import re
 import os
 import cv2
@@ -6,35 +14,24 @@ import numpy as np
 from scipy.signal import iirfilter, find_peaks, filtfilt
 from scipy.ndimage import gaussian_filter1d
 
-### Function defintions
-def plot_vecs(frame, vectors):
-    '''
-    Plots a given set of motion vectors onto a frame
-    
-    Inputs:
-        frame   - original frame to be labeled
-        vectors - list of motion vectors
-    Output:
-        labeled_frame - frame with the labeled vectors labeled
-    '''
-    for vec in vectors:
-        x1, y1, x2, y2 = vec  # Unpack the values
-        labeled_frame = cv2.arrowedLine(frame.copy(), (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 3, tipLength=0.2)
-    return labeled_frame
-
-##############################################################################
+################################################################################
 def sample_dark_pts(frame, point, box_size=(15, 15), grid_size=(3, 3)):
-    '''
-    Samples dark points in an evenly distributed manner within a box centered at a given point.
+    """
+    Sample the darkest pixels from a grid of subregions within a box centered at a given point.
 
     Inputs:
-        frame          - frame from which to sample
-        point          - center point (x, y) around which to sample
-        box_size       - tuple (width, height) defining the size of the sampling box
-        grid_size      - tuple (rows, cols) defining how many regions to sample
-    Output: 
-        sampled_points - list of (x, y) coordinates of sampled dark points
-    '''
+        frame (ndarray):     Input video frame (color image as a NumPy array).
+        point (tuple):       (x, y) coordinates representing the center of the sampling box.
+        box_size (tuple):    (width, height) of the box around the center within which to sample.
+                             Default is (15, 15).
+        grid_size (tuple):   (rows, cols) specifying how the box is divided into subregions.
+                             Default is (3, 3).
+
+    Output:
+        list: A list of (x, y) tuples corresponding to the darkest pixel in each subregion,
+              adjusted to the coordinates of the original frame.
+              Returns an empty list if the region is invalid.
+    """
     cx, cy = map(int, point)  # Ensure integer coordinates
     w, h = box_size  # Width and height of the bounding box
 
@@ -78,18 +75,20 @@ def sample_dark_pts(frame, point, box_size=(15, 15), grid_size=(3, 3)):
 
     return sampled_points
 
-##############################################################################
+################################################################################
 def calc_motion_vecs(dark_points_t1, dark_points_t2, threshold=200):
-    '''
-    Match and subtract dark points between two frames to calculate motion.
+    """
+    Calculate motion vectors by matching dark points between two consecutive frames.
 
     Inputs:
-        dark_points_t1 - dark points from frame t-1 [(x, y), ...]
-        dark_points_t2 - dark points from frame t [(x, y), ...]
-        threshold      - maximum allowed distance to consider points as matched
-    Output: 
-        motion_vectors - list of motion vectors [(dx, dy), ...]
-    '''
+        dark_points_t1 (list): List of (x, y) coordinates from frame t-1.
+        dark_points_t2 (list): List of (x, y) coordinates from frame t.
+        threshold (float):     Maximum distance allowed to consider two points as a match. Default is 200.
+
+    Output:
+        ndarray: Array of motion vectors [(dx, dy), ...] representing the displacement
+                 of matched points from t-1 to t. Only vectors below the threshold are included.
+    """
     # Initialize array of motion vectors
     motion_vectors = []
 
@@ -111,20 +110,23 @@ def calc_motion_vecs(dark_points_t1, dark_points_t2, threshold=200):
 
     return np.array(motion_vectors)
 
-##############################################################################
+################################################################################
 def find_troughs_and_peaks(signal, distance=10, height=[0.1,5]):
-    '''
-    Finds peaks (local maxima) followed by troughs (local minima).
+    """
+    Detect peaks (local maxima) that are followed by troughs (local minima) within a specified distance.
 
     Inputs:
-        signal    - 1D array of signal values
-        distance  - maximum number of frames between peaks/troughs
-        height    - minimum and maximum values for each peak/trough
+        signal (ndarray):     1D array of signal values.
+        distance (int):       Maximum number of frames allowed between a peak and its corresponding trough.
+                              Default is 10.
+        height (list):        Two-element list specifying the minimum and maximum height of peaks/troughs.
+                              Default is [0.1, 5].
 
     Outputs:
-        troughs   - indices of detected troughs
-        peaks     - indices of detected peaks that are followed by a trough within distance
-    '''
+        tuple:
+            - troughs (ndarray): Indices of troughs that follow valid peaks within the specified distance.
+            - peaks (ndarray):   Indices of peaks that are followed by a trough within the specified distance.
+    """
     # Find troughs (invert signal to detect minima)
     troughs, _ = find_peaks(-signal, distance=distance/2, height=(height[0], height[1]))
     
@@ -148,19 +150,20 @@ def find_troughs_and_peaks(signal, distance=10, height=[0.1,5]):
             
     return np.array(valid_troughs), np.array(valid_peaks)
 
-##############################################################################
+################################################################################
 def make_bin_edges(bin_width, dt, total_time):
-    '''
-    Generates bin edge timestamps for segmenting a time series into fixed-width bins.
+    """
+    Generate timestamp edges to segment a time series into bins of fixed width.
 
     Inputs:
-        bin_width  - desired width of each bin in seconds
-        dt         - time step between consecutive samples in seconds
-        total_time - total duration of the signal in seconds
+        bin_width (float): Desired width of each bin in seconds.
+        dt (float):        Time step between consecutive samples in seconds.
+        total_time (float): Total duration of the signal in seconds.
 
     Outputs:
-        bin_edges - array of timestamps representing bin edges
-    '''
+        ndarray: Array of timestamps representing the edges of each bin, starting at 0 and
+                 covering the total_time in increments of bin_width.
+    """
     # Compute the timesteps (same code as previous)
     ts = np.arange(0, total_time, dt)
     
@@ -181,21 +184,23 @@ def make_bin_edges(bin_width, dt, total_time):
     bin_edges = np.arange(0, n_timesteps+1, steps_per_bin) * dt
     return bin_edges
 
-##############################################################################
+################################################################################
 def motion_comp(prev_frame, curr_frame, num_points=500, points_to_use=500):
-    '''
-    Obtains new warped frame1 to account for camera (ego) motion
-        Inputs:
-            prev_frame    - first image frame
-            curr_frame    - second sequential image frame
-            num_points    - number of feature points to obtain from the images
-            points_to_use - number of point to use for motion translation estimation 
-            
-        Outputs:
-            A             - estimated motion translation matrix or homography matrix
-            prev_points   - feature points obtained on previous image
-            curr_points   - feature points obtained on current image
-    '''
+    """
+    Estimate the motion transformation matrix between two sequential image frames.
+    Contains code adapted from [https://github.com/itberrios/CV_projects/tree/main]
+
+    Inputs:
+        prev_frame (ndarray):   The first image frame (RGB).
+        curr_frame (ndarray):   The second sequential image frame (RGB).
+        num_points (int):       Number of feature points to detect in the first frame.
+        points_to_use (int):    Number of matched points to use for motion estimation.
+
+    Outputs:
+        A (ndarray or None):    Estimated affine transformation matrix (2x3) or None if estimation fails.
+        prev_points (ndarray):  Feature points detected in the previous frame.
+        curr_points (ndarray):  Corresponding matched points in the current frame.
+    """
     # Convert to grayscale
     prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_RGB2GRAY)
     curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_RGB2GRAY)
@@ -228,19 +233,25 @@ def motion_comp(prev_frame, curr_frame, num_points=500, points_to_use=500):
 
     return A, prev_points, curr_points
 
-##############################################################################
+################################################################################
 def get_grinder_motion(prev_frame, curr_frame, prev_com, curr_com):
-    ''' 
-    Obtains detected grinder points and motion vectors between frame 1 and frame 2 
-        Inputs:
-            prev_frame, curr_frame - consecutive video frames
-            prev_com, curr_com     - centroids of the grinder in each frame
-            
-        Outputs:
-            prev_grinder_pts, curr_grinder_pts - matched keypoints in each frame
-            motion                             - vector motion between points
-            magnitude, angle                   - motion characteristics
-    '''
+    """
+    Detects matched grinder keypoints and computes motion vectors between two frames.
+    Contains code adapted from [https://github.com/itberrios/CV_projects/tree/main]
+
+    Inputs:
+        prev_frame (ndarray): Previous video frame.
+        curr_frame (ndarray): Current video frame.
+        prev_com (tuple):     Centroid (x, y) of the grinder in the previous frame.
+        curr_com (tuple):     Centroid (x, y) of the grinder in the current frame.
+
+    Outputs:
+        prev_grinder_pts (ndarray): Transformed grinder points from previous frame.
+        curr_grinder_pts (ndarray): Grinder points sampled in current frame.
+        motion (ndarray):           Motion vectors between matched points.
+        magnitude (ndarray):        Magnitude of motion vectors.
+        angle (ndarray):            Angles (radians) of motion vectors.
+    """
 
     ### Get affine transformation for frame alignment
     # Get frame info
@@ -274,21 +285,19 @@ def get_grinder_motion(prev_frame, curr_frame, prev_com, curr_com):
     
     return comp_pts, curr_grinder_pts, motion, magnitude, angle
     
-##############################################################################
-def process_video(video_path=None, grinder_coms=None, save=False, save_path=None):
-    '''
-    Processes a video to compute frame-by-frame motion vectors between grinder positions.
+################################################################################
+def process_video(video_path=None, grinder_coms=None):
+    """
+    Processes a video to compute motion vectors between grinder positions frame-by-frame.
 
     Inputs:
-        video_path   - path to the input video file
-        grinder_coms - array of grinder center of mass positions per frame
-        save         - whether to save a labeled output video with motion vectors
-        save_path    - directory to save the labeled video (required if save=True)
+        video_path (str):       Path to the input video file.
+        grinder_coms (ndarray): Array of grinder center-of-mass positions per frame, shape (n_frames, 2).
 
     Outputs:
-        mags - list of motion magnitude arrays for each frame
-        angs - list of motion angle arrays for each frame
-    '''
+        mags (list of ndarray): List of arrays containing motion vector magnitudes per frame.
+        angs (list of ndarray): List of arrays containing motion vector angles (radians) per frame.
+    """
     ### Check that a video path and grinder CoMs were both provided
     if video_path is None:   raise ValueError("No video path was provided.")
     if grinder_coms is None: raise ValueError("No grinder CoMs were provided.")
@@ -313,7 +322,6 @@ def process_video(video_path=None, grinder_coms=None, save=False, save_path=None
         success, curr_frame = vid.read()
         curr_com   = grinder_coms[i] if success else None
         curr_pts   = []
-        if save: plot_frame = prev_frame.copy()
 
         if success:
             # If a grinder was detected, calculate the motion
@@ -343,36 +351,24 @@ def process_video(video_path=None, grinder_coms=None, save=False, save_path=None
 
         # Save the cluster locations from each frame
         saved_pts.append(curr_pts)
-
-        # Save each labeled frame for visualization
-        if save: frames.append(plot_frame)
         
-    ### Save video with vectors labeled
-    if save:
-        speed = 1/4 # 1 = normal speed, 1/4 = 1/4 of the normal speed, 4 = 4x the normal speed
-        if save_path is None: raise ValueError("No path was provided for the labeled video.")
-        vwriter = cv2.VideoWriter(save_path + video_name + '_PumpKin_slowed.avi', 
-                                  cv2.VideoWriter_fourcc(*'MJPG'), fps*speed, (width, height))
-        for frame in frames: vwriter.write(frame)
-
-        # Close video writer
-        vwriter.release()
-        print("Labeled video saved to ", save_path + video_name.replace('_cropped', '') + '_PumpKin_slowed.avi')
-
     return mags, angs
 
-##############################################################################
+################################################################################
 def get_strain_cond(video_name):
-    '''
-    Splits a string of format 'STRAIN_CONDITION_#####' into strain and condition parts.
+    """
+    Parses a video filename to extract the strain and condition identifiers.
 
-    Input:
-        video_name - string in the format 'STRAIN_CONDITION_XXXXX'
+    Inputs:
+        video_name (str): Full name of the video file (e.g., 'n2_ff_00001.wmv' or 'n2_ff_00001_cropped.wmv').
 
-    Output:
-        strain    - the genetic strain
-        condition - the satiety condition
-    '''
+    Outputs:
+        strain (str):    Extracted strain identifier from the filename (e.g., 'n2').
+        condition (str): Extracted condition identifier from the filename (e.g., 'ff').
+
+    Raises:
+        ValueError: If the filename does not match the expected format 'STRAIN_CONDITION_#####.ext'.
+    """
     base = os.path.splitext(video_name)[0]  # Remove extension, e.g., '.wmv'
     
     # Match STRAIN_CONDITION_##### optionally followed by '_cropped'
@@ -384,19 +380,22 @@ def get_strain_cond(video_name):
     strain, condition = match.group(1), match.group(2)
     return strain, condition
 
-##############################################################################
+################################################################################
 def get_filtered_motion(strain_name=None, cond_name=None, mags=None, angs=None, fps=20):
-    '''
+    """
     Calculates the signed and filtered motion magnitude of grinder points across frames.
 
     Inputs:
-        mags - list of motion magnitudes per frame
-        angs - list of motion angles per frame
+        strain_name (str):      Name of the genetic strain.
+        cond_name (str):        Name of the experimental condition.
+        mags (list of ndarray): List of motion magnitude arrays per frame.
+        angs (list of ndarray): List of motion angle arrays per frame (radians).
+        fps (float):            Sampling frequency of the video frames (default is 20).
 
     Outputs:
-        signed_mags_filt - low-pass filtered signed average motion magnitude signal
-        fc               - cutoff frequency used for filtering based on the strain
-    '''
+        signed_mags_filt (ndarray): Low-pass filtered signed average motion magnitude signal.
+        fc (float):                 Cutoff frequency used for filtering based on the strain and condition.
+    """
     ### Check that a strain name, condition name, and motion information were all provided
     if strain_name is None: raise ValueError("No strain name was provided.")
     if cond_name is None:   raise ValueError("No condition name was provided.")
@@ -431,6 +430,9 @@ def get_filtered_motion(strain_name=None, cond_name=None, mags=None, angs=None, 
         avg_signed_mags[i] = avg_mags[i]*signs[i]
 
     ### Build low-pass filter and apply to signal
+    ### NOTE: if using a new strain, you will need to add it as follows:
+    ### elif strain_name == 'new_strain' and (cond_name == 'ff' or cond_name == 'sf'): 
+    ###     fc = 2*expected_max_rate_for_new_strain
     # Use a cutoff frequency (fc) equal to 2*max_expected_pumping_rate
     if strain_name == 'n2' and (cond_name == 'ff' or cond_name == 'sf'):
         fc = 10 # N2 on food has a higher expected pumping rate
@@ -445,29 +447,29 @@ def get_filtered_motion(strain_name=None, cond_name=None, mags=None, angs=None, 
     
     return signed_mags_filt, fc
 
-##############################################################################
+################################################################################
 def get_pumping_rate(video_path=None, grinder_motion=None, fps=20, fc=None, 
                      min_height=0.5, max_height=5, sigma=1, save=False, save_path=None):
-    '''
-    Estimates the continuous and discrete pumping rate of a grinder based on grinder motion.
+    """
+    Estimates the continuous and discrete pumping rate of a grinder based on motion signals.
 
     Inputs:
-        video_path     - path to the video file
-        grinder_motion - array of grinder motion magnitudes per frame
-        fps            - video framerate
-        fc             - cutoff frequency used for filtering based on the strain
-        min_height     - minimum height threshold for peak detection
-        max_height     - maximum height threshold for peak detection
-        sigma          - standard deviation for Gaussian filtering
-        save           - whether to save the pumping rate and peak times
-        save_path      - directory path to save output files (required if save=True)
+        video_path (str):         Path to the input video file.
+        grinder_motion (ndarray): Array of grinder motion magnitudes per frame.
+        fps (float):              Frame rate of the video.
+        fc (float):               Cutoff frequency used for filtering based on the strain.
+        min_height (float):       Minimum height threshold for peak detection.
+        max_height (float):       Maximum height threshold for peak detection.
+        sigma (float):            Standard deviation for Gaussian smoothing of discrete pumping rate.
+        save (bool):              Whether to save the pumping rate and peak times to disk.
+        save_path (str):          Directory path to save output files (required if save=True).
 
     Outputs:
-        pr_cont  - continuous pumping rate signal (Gaussian smoothed)
-        pr_disc  - discrete pump count per time bin
-        peaks    - frame indices where valid pump peaks occur
-        troughs  - frame indices where valid pump troughs occur
-    '''
+        pr_cont (ndarray):      Continuous pumping rate signal (Gaussian smoothed).
+        pr_disc (ndarray):      Discrete pump counts per time bin.
+        peaks (ndarray):        Frame indices where valid pump peaks occur.
+        troughs (ndarray):      Frame indices where valid pump troughs occur.
+    """
     ### Check that a video path, grinder motion, and grinder CoMs were both provided
     if video_path is None:     raise ValueError("No video path was provided.")
     if grinder_motion is None: raise ValueError("No grinder motion signal was provided.")
@@ -488,7 +490,7 @@ def get_pumping_rate(video_path=None, grinder_motion=None, fps=20, fc=None,
     if save:
         if save_path is None: raise ValueError("No save path was provided.")
         video_name = os.path.splitext(os.path.basename(video_path))[0]
-        save_rate_path = save_path + video_name.replace('_cropped', '') + '_PumpKin.csv'
+        save_rate_path = save_path + video_name.replace('_cropped', '') + '_PumpKin_rate.csv'
         np.savetxt(save_rate_path, pr_cont)
         print('Continuous pumping rate saved to ' + save_rate_path) 
         

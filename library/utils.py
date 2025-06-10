@@ -1,3 +1,13 @@
+################################################################################
+# training.py
+# Written by Jacob Wheelock & Erin Shappell for Lu Lab
+# 
+# This module defines a custom `Dataset` class for loading images and corresponding 
+# bounding box annotations in Pascal VOC XML format. It also includes utility functions 
+# for batching data and creating PyTorch `DataLoader` objects for training and validation.
+#
+################################################################################
+# Imports
 import torch
 from torch.utils.data import Dataset, DataLoader
 import cv2
@@ -10,14 +20,52 @@ from numpy.linalg import norm
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter1d
 
+################################################################################   
 def collate_fn(batch):
     """
-    To handle the data loading as different images may have different number 
-    of objects and to handle varying size tensors as well.
+    Custom collate function to merge a list of samples into a batch.
+
+    Inputs:
+        batch (list): List of samples, where each sample is a tuple of data elements.
+
+    Output:
+        tuple: Tuple of tuples, where each inner tuple contains all elements
+               of a given type from the batch (e.g., images, targets).
+
     """
     return tuple(zip(*batch))
 
+################################################################################   
 class getDataset(Dataset):
+    """
+    Custom PyTorch Dataset for loading images and corresponding bounding box annotations
+    from a directory containing image files and Pascal VOC-style XML annotation files.
+
+    Attributes:
+        dir_path (str):                  Directory path containing images and XML annotation files.
+        width (int):                     Desired image width after resizing.
+        height (int):                    Desired image height after resizing.
+        transforms (callable, optional): Optional transformations to be applied on the images and bounding boxes.
+        classes (list):                  List of unique class names parsed from annotation XML files, with 'background' as the first class.
+        all_images (list):               Sorted list of image filenames in the dataset directory.
+
+    Methods:
+        get_classes_from_annotations():
+            Parses XML annotation files to extract all unique classes.
+
+        __getitem__(idx):
+            Loads and processes the image and its annotations at index `idx`.
+            Applies resizing and optional transformations.
+            Returns the processed image tensor and target dictionary with bounding boxes and labels.
+
+        __len__():
+            Returns the total number of images in the dataset.
+
+    Usage:
+        dataset = getDataset(dir_path='path/to/data', width=224, height=224, transforms=transform_function)
+        image, target = dataset[0]
+
+    """
     def __init__(self, dir_path, width, height, transforms=None):
         self.transforms = transforms
         self.dir_path = dir_path
@@ -155,7 +203,23 @@ class getDataset(Dataset):
     def __len__(self):
         return len(self.all_images)
 
+################################################################################   
 def get_loaders(train_dataset, valid_dataset, BATCH_SIZE, collate_fn):
+    """
+    Create DataLoader objects for training and validation datasets.
+
+    Inputs:
+        train_dataset (Dataset): PyTorch Dataset object for training data.
+        valid_dataset (Dataset): PyTorch Dataset object for validation data.
+        BATCH_SIZE (int):        Number of samples per batch to load.
+        collate_fn (callable):   Function to merge a list of samples into a mini-batch, used for handling variable-size inputs.
+
+    Output:
+        list: A list containing two DataLoader objects:
+              - train_loader: DataLoader for the training dataset with shuffling enabled.
+              - valid_loader: DataLoader for the validation dataset without shuffling.
+
+    """
     train_loader = DataLoader(
     train_dataset,
     batch_size=BATCH_SIZE,
@@ -172,21 +236,25 @@ def get_loaders(train_dataset, valid_dataset, BATCH_SIZE, collate_fn):
     )
     return [train_loader, valid_loader]
 
-### ROI FUNCTIONS ###
+################################################################################   
+### PUMPKIN-SPECIFIC FUNCTIONS ###
+################################################################################   
 def getROI(roi_width, coords, frame, f_width, f_height):
-    '''
-    Extract a square ROI from the frame while ensuring it remains within frame bounds.
+    """
+    Extract a fixed-size square region of interest (ROI) from a video frame, centered at specified coordinates,
+    while ensuring the ROI remains within the frame boundaries.
 
-    INPUTS:
-    - roi_width - half-width of the square ROI
-    - coords    - (x, y) coordinates of the ROI center
-    - frame     - input video frame (height, width, channels)
-    - f_width   - frame width
-    - f_height  - frame height
+    Inputs:
+        roi_width (int):    Half-width of the square ROI to extract (final size will be 2*roi_width).
+        coords (tuple):     (x, y) coordinates representing the center of the ROI in the frame.
+        frame (ndarray):    Input video frame as a NumPy array of shape (H, W, C).
+        f_width (int):      Width of the input frame.
+        f_height (int):     Height of the input frame.
 
-    OUTPUT:
-    - roi - extracted and resized ROI
-    '''
+    Output:
+        ndarray: The extracted ROI as a NumPy array of shape (2*roi_width, 2*roi_width, 3),
+                 clipped and converted to uint8 format for compatibility with video processing.
+    """
     # Get area centered at bounding box center
     # cropping a [2*roi_width x 2*roi_width] px area from the frame
     x, y = coords
@@ -250,7 +318,19 @@ def getROI(roi_width, coords, frame, f_width, f_height):
 
     return roi
 
+################################################################################   
 def getIOU(box_1, box_2):
+    """
+    Compute the Intersection over Union (IoU) between two bounding boxes.
+
+    Inputs:
+        box_1 (array-like): Bounding box in the format [x_min, y_min, x_max, y_max].
+        box_2 (array-like): Second bounding box in the same format.
+
+    Output:
+        float: IoU value, defined as the area of intersection divided by the area of union
+               between the two bounding boxes. Returns 0 if there is no overlap.
+    """
     # Coordinates of the area of intersection
     ix1 = np.maximum(box_1[0], box_2[0])
     iy1 = np.maximum(box_1[1], box_2[1])
@@ -276,16 +356,53 @@ def getIOU(box_1, box_2):
     IOU = intersect_area / union_area
     return IOU
 
+################################################################################   
 def smooth(data, sigma):
+    """
+    Apply 1D Gaussian smoothing to input data.
+
+    Inputs:
+        data (array-like): 1D array of numerical values to be smoothed.
+        sigma (float):     Standard deviation of the Gaussian kernel used for smoothing.
+
+    Output:
+        ndarray: Smoothed version of the input data, with the same shape.
+    """
     data_smoothed = gaussian_filter1d(data,sigma,mode='nearest')
     return data_smoothed
 
+################################################################################   
 def get_dist(ROI1, ROI2):
+    """
+    Compute the slope between the centers of two rectangular regions of interest (ROIs).
+
+    Inputs:
+        ROI1 (array-like): Coordinates of the first ROI in the format [x_min, y_min, x_max, y_max].
+        ROI2 (array-like): Coordinates of the second ROI in the same format.
+
+    Output:
+        float: Slope between the centers of the two ROIs, calculated as
+               (Δy / Δx) = (center2_y - center1_y) / (center2_x - center1_x).
+               May raise a divide-by-zero error if centers have the same x-coordinate.
+    """
     center1 = [np.mean([ROI1[0], ROI1[2]]).astype('int'), np.mean([ROI1[1], ROI1[3]]).astype('int')]
     center2 = [np.mean([ROI2[0], ROI2[2]]).astype('int'), np.mean([ROI2[1], ROI2[3]]).astype('int')]
     return (center2[1]-center1[1])/(center2[0]-center1[0])
 
+################################################################################   
 def interpolate(data, kind='cubic'):
+    """
+    Interpolate missing or zero values in a 1D array using a specified interpolation method.
+
+    Inputs:
+        data (array-like): 1D array of numerical values, where zeros are treated as missing data.
+        kind (str):        Type of interpolation to use (e.g., 'linear', 'cubic', 'quadratic').
+                           Default is 'cubic'.
+
+    Output:
+        ndarray: Array of the same shape as input, with zero values replaced by interpolated values.
+                 If fewer than two non-zero values are present, the original array is returned unchanged.
+    """
     x = np.arange(len(data))
     mask = data != 0
     
@@ -295,8 +412,24 @@ def interpolate(data, kind='cubic'):
     f = interp1d(x[mask], data[mask], kind=kind, fill_value="extrapolate")
     return f(x)
 
+################################################################################   
 def filter_ROIs(ROIs, threshold=200, sigma=3, max_values=(250,250), verbose=False):
-    
+    """
+    Filter, interpolate, and smooth a sequence of ROI center coordinates to correct outliers and missing values.
+
+    Inputs:
+        ROIs (ndarray):     2D NumPy array of shape (n, 2) containing ROI center coordinates over time.
+        threshold (float):  Maximum allowed distance between consecutive points before treating as an outlier.
+                            Default is 200.
+        sigma (float):      Standard deviation for Gaussian smoothing. Default is 3.
+        max_values (tuple): Maximum (x, y) values to clip the ROI coordinates to. Default is (250, 250).
+        verbose (bool):     If True, enables verbose output (not used in current implementation). Default is False.
+
+    Output:
+        tuple: A tuple containing two arrays:
+            - ROIs_filt (ndarray):   Interpolated and clipped ROI coordinates.
+            - ROIs_smooth (ndarray): Smoothed ROI coordinates, rounded to integers.
+    """
     # Check array dimensions
     if ROIs.shape[1] != 2:
         raise ValueError("Input ROIs must be a 2D NumPy array with shape (n, 2).")
