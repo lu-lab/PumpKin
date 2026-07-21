@@ -1,4 +1,5 @@
 ---
+![](pumpkin_gif.gif)
 # PumpKin: A machine learning package for automatically tracking pharyngeal pumping kinematics in freely moving *C. elegans*
 **Read the manuscript at [PLoS Computational Biology]([https://doi.org/10.1101/2025.06.19.660198](https://doi.org/10.1371/journal.pcbi.1014489)).**
 
